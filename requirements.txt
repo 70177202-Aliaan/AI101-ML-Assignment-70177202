@@ -1,1 +1,12 @@
-
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+jupyter
+torch
+transformers
+datasets
+evaluate
+rouge_score
+accelerate
