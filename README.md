@@ -46,4 +46,54 @@ Click any link below to inspect the executed Jupyter notebooks, 2-page IEEE PDF 
 | :---: | :--- | :---: | :---: | :---: | :---: |
 | **A1** | **Breast Cancer Diagnosis**<br>*(Clinical Binary Classification)* | [📓 `A1_notebook.ipynb`](A1_Breast_Cancer/A1_notebook.ipynb) | [📄 `70177202_A1_Report.pdf`](A1_Breast_Cancer/report/70177202_A1_Report.pdf) | [📝 `main.tex`](A1_Breast_Cancer/report/source/main.tex) | [📊 EDA](A1_Breast_Cancer/figures/a1_eda.png) • [📈 Results](A1_Breast_Cancer/figures/a1_results.png) |
 | **B1** | **Fake Job Posting Detection**<br>*(Imbalanced Multimodal NLP + Tabular)* | [📓 `B1_notebook.ipynb`](B1_Fake_Job_Postings/B1_notebook.ipynb) | [📄 `70177202_B1_Report.pdf`](B1_Fake_Job_Postings/report/70177202_B1_Report.pdf) | [📝 `main.tex`](B1_Fake_Job_Postings/report/source/main.tex) | [📊 EDA](B1_Fake_Job_Postings/figures/b1_eda.png) • [📈 Results](B1_Fake_Job_Postings/figures/b1_results.png) |
-| **C2** | **BBC News Summarisation**<br>*(Abstractive Seq2Seq Fine-Tuning)* | [📓 `C2_notebook.ipynb`](C2_BBC_Summarisation/C2_notebook.ipynb) | [📄 `70177202_C2_Report.pdf`](C2_BBC_Summarisation/report/70177202_C2_Report.pdf) | [📝 `main
+| **C2** | **BBC News Summarisation**<br>*(Abstractive Seq2Seq Fine-Tuning)* | [📓 `C2_notebook.ipynb`](C2_BBC_Summarisation/C2_notebook.ipynb) | [📄 `70177202_C2_Report.pdf`](C2_BBC_Summarisation/report/70177202_C2_Report.pdf) | [📝 `main.tex`](C2_BBC_Summarisation/report/source/main.tex) | [📊 EDA](C2_BBC_Summarisation/figures/c2_eda.png) • [📈 Results](C2_BBC_Summarisation/figures/c2_results.png) |
+
+---
+
+## 🏆 Experimental Highlights & Benchmark Summary
+
+| Task | Dataset & Split | Winning Architecture | Primary Test Metrics | Key Engineering Insight |
+| :---: | :--- | :--- | :--- | :--- |
+| **A1** | **Breast Cancer Wisconsin**<br>`569` samples • `30` features<br>*(80% Train / 20% Test, 5-Fold CV)* | **Tuned Random Forest**<br>`100` trees, `max_depth=5`<br>Threshold `t = 0.26` | **F1:** `0.9630`<br>**ROC-AUC:** `0.9950`<br>**Recall:** `0.9524` | Lowering threshold from `0.50` to `0.26` raised malignant recall from `92.86%` to `95.24%` (`≥ 0.95` target). Naive correlation pruning hurt F1 (`0.9136`). |
+| **B1** | **EMSCAD Job Postings**<br>`17,880` ads • `4.84%` fraud<br>*(70% Train / 15% Val / 15% Test)* | **Calibrated Linear SVM**<br>`C=0.5`, `20,077` features<br>Val Threshold `t = 0.40` | **Fraud F1:** `0.8618`<br>**PR-AUC:** `0.9404`<br>**ROC-AUC:** `0.9925` | Fusing TF-IDF `(1,2)`-grams with engineered missing-metadata flags beat Text-Only (`0.8365` F1) and Structured-Only (`0.4198` F1). |
+| **C2** | **BBC News Summary**<br>`2,126` articles • `5` categories<br>*(80% Train / 10% Val / 10% Test)* | **Fine-Tuned `t5-small`**<br>`3` epochs, `lr=3e-4` (T4 GPU)<br>Beam=`4`, 3-gram block | **ROUGE-1:** `53.56`<br>**ROUGE-2:** `44.77`<br>**ROUGE-L:** `40.31` | Outperformed Zero-Shot T5 (`31.50` R-1) and Lead-3 (`36.86` R-L), while 3-gram blocking cut phrase repetition from `13.83%` to `0.04%`. |
+
+---
+
+## 📁 Repository Structure
+
+```text
+AI101-ML-Assignment-70177202/
+├── A1_Breast_Cancer/
+│   ├── A1_notebook.ipynb
+│   ├── data/
+│   ├── figures/
+│   │   ├── a1_eda.png
+│   │   └── a1_results.png
+│   └── report/
+│       ├── 70177202_A1_Report.pdf
+│       └── source/
+│           └── main.tex
+├── B1_Fake_Job_Postings/
+│   ├── B1_notebook.ipynb
+│   ├── data/
+│   ├── figures/
+│   │   ├── b1_eda.png
+│   │   └── b1_results.png
+│   └── report/
+│       ├── 70177202_B1_Report.pdf
+│       └── source/
+│           └── main.tex
+├── C2_BBC_Summarisation/
+│   ├── C2_notebook.ipynb
+│   ├── figures/
+│   │   ├── c2_eda.png
+│   │   └── c2_results.png
+│   └── report/
+│       ├── 70177202_C2_Report.pdf
+│       └── source/
+│           └── main.tex
+├── AI_DISCLOSURE.md
+├── README.md
+├── requirements.txt
+└── .gitignore
