@@ -1,0 +1,159 @@
+\documentclass[conference,a4paper]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{amsmath,amssymb}
+\usepackage[hidelinks]{hyperref}
+
+\setlength{\textfloatsep}{4pt plus 1pt minus 1pt}
+\setlength{\intextsep}{4pt plus 1pt minus 1pt}
+\setlength{\abovecaptionskip}{1.5pt}
+\setlength{\belowcaptionskip}{1pt}
+
+\title{Task C2: Abstractive Summarisation of BBC News Articles with Fine-Tuned T5-Small}
+
+\author{
+\IEEEauthorblockN{Aliaan Shams \quad Roll No. 70177202 \quad Section C}
+\IEEEauthorblockA{Department of Intelligent Systems, The University of Lahore (AI-101) \\
+Repository: \url{https://github.com/Aliaan-70177202/AI101-ML-Assignment-70177202} \\
+Instructor: Dr. Muhammad Awais, AI Architect}
+}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+Automated news summarisation condenses multi-paragraph journalism into concise, coherent digests without losing core factual claims. While simple extractive heuristics copy leading sentences verbatim, sequence-to-sequence Transformers can synthesize information across an article when adapted to domain style and target summary length. In this work, we fine-tuned \texttt{t5-small} (60M parameters) on the BBC News Summary corpus and benchmarked it against a Lead-3 extractive baseline and zero-shot \texttt{t5-small}. On the hold-out test split ($n = 213$), fine-tuning raised ROUGE-1 from $31.50$ to $53.56$, ROUGE-2 from $21.90$ to $44.77$, and ROUGE-L from $23.81$ to $40.31$, outperforming both zero-shot and Lead-3 baselines while beam search with 3-gram blocking cut phrase repetition from $13.83\%$ to $0.04\%$.
+
+\section{Problem Statement}
+Given a tokenized news article $\mathbf{x} = (x_1, \dots, x_m)$ prefixed with the task prompt \texttt{"summarize: "} ($m \le 512$), the objective is to learn a conditional sequence-to-sequence model $p_\theta(\mathbf{y} \mid \mathbf{x})$ that generates an abstractive summary $\mathbf{y} = (y_1, \dots, y_n)$ ($n \le 128$) capturing the article's central events. Performance is measured using stemmed ROUGE-1, ROUGE-2, ROUGE-L, and ROUGE-Lsum F1 scores alongside summary word length and trigram repetition rate.
+
+\section{Dataset Used}
+We used the BBC News Summary dataset from Hugging Face (\texttt{gopalkalpande/bbc-news-summary}, CC BY 4.0 license) \cite{bbc_ds}, originally derived from Greene and Cunningham's BBC news archive \cite{greene06}. The raw split contains $2,224$ articles across five topics (\textit{sport}, \textit{business}, \textit{politics}, \textit{entertainment}, \textit{tech}) paired with human-written multi-sentence reference summaries. Whitespace normalization and deduplication removed $98$ duplicate/empty rows, leaving $2,126$ unique articles. Tokenizing with SentencePiece (\texttt{t5-small}) showed a mean source length of $539.3$ tokens, with $43.29\%$ of articles exceeding the $512$-token input cap.
+
+\section{Dataset Statistics}
+Table~\ref{tab:c2_stats} reports dataset counts, category proportions, word lengths, compression ratios, and split sizes. Fig.~\ref{fig:c2_eda} illustrates the balanced topic distribution and the word-length shift from full articles (median $327.0$ words) to reference summaries (median $142.0$ words, mean compression ratio $0.44$).
+
+\begin{table}[htbp]
+\centering
+\caption{Dataset statistics for cleaned BBC News Summary ($n = 2,126$).}
+\label{tab:c2_stats}
+\scriptsize
+\renewcommand{\arraystretch}{0.92}
+\begin{tabularx}{\columnwidth}{lX}
+\toprule
+\textbf{Property} & \textbf{Value} \\
+\midrule
+Samples (after cleaning) & 2,126 (98 duplicate/empty removed from 2,224) \\
+Categories (5) & Sport 504 (23.71\%), Business 503 (23.66\%), Politics 403 (18.96\%), Entertainment 369 (17.36\%), Tech 347 (16.32\%) \\
+Article words & Mean $379.33 \pm 238.24$ | Median $327.00$ (87--4,377) \\
+Summary words & Mean $165.34 \pm 110.32$ | Median $142.00$ (38--2,073) \\
+Compression ratio & Mean $0.44 \pm 0.05$ | Median $0.44$ (0.21--0.69) \\
+Token truncation & $43.29\%$ of train articles $> 512$ source tokens \\
+Train / Val / Test & 1,700 (80\%) / 213 (10\%) / 213 (10\%) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.65\columnwidth]{c2_eda.png}
+\caption{Article counts across the five BBC categories (left) and word-length histograms comparing full articles against reference summaries (right).}
+\label{fig:c2_eda}
+\end{figure}
+
+\section{Methodology}
+\subsection{Learning Setting}
+This is a supervised conditional text generation task. We compared three approaches: (1) a \textbf{Lead-3 Extractive Baseline} taking the first three sentences of each article; (2) \textbf{Zero-Shot Pretrained \texttt{t5-small}} \cite{raffel20}; and (3) \textbf{Fine-Tuned \texttt{t5-small}} trained end-to-end with cross-entropy loss and teacher forcing via Hugging Face \texttt{Seq2SeqTrainer}.
+
+\subsection{Data Split Approach}
+The $2,126$ articles were partitioned via a stratified 80\%/10\%/10\% split ($1,700$ train / $213$ validation / $213$ test) stratified by news category with \texttt{random\_state = 42}. Model checkpoint selection used validation ROUGE-L after each epoch, and the test split was evaluated once after training finished.
+
+\subsection{Parameter Settings}
+Table~\ref{tab:c2_params} details training and decoding hyperparameters.
+
+\begin{table}[htbp]
+\centering
+\caption{Fine-tuning and generation parameter settings for \texttt{t5-small}.}
+\label{tab:c2_params}
+\scriptsize
+\renewcommand{\arraystretch}{0.92}
+\begin{tabularx}{\columnwidth}{lX}
+\toprule
+\textbf{Component} & \textbf{Setting} \\
+\midrule
+Backbone & \texttt{t5-small} (60M params, SentencePiece tokenizer) \\
+Sequence limits & \texttt{max\_source\_len} $= 512$, \texttt{max\_target\_len} $= 128$, \texttt{min\_new} $= 30$ \\
+Optimization & AdamW, $\text{lr} = 3\times 10^{-4}$, weight decay $0.01$, batch size $16$, $3$ epochs, FP16 on NVIDIA Tesla T4 GPU ($237.4$\,s) \\
+Decoding (primary) & Beam search ($\text{num\_beams}=4$), $\text{no\_repeat\_ngram\_size}=3$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Results and Analysis}
+\subsection{Results}
+Table~\ref{tab:c2_results} compares all three models on the hold-out test set ($n = 213$), and Table~\ref{tab:c2_ablation} reports the decoding strategy ablation. Fig.~\ref{fig:c2_results} shows test ROUGE bar charts alongside training/validation loss curves across epochs (validation loss fell from $0.5653$ at Epoch 1 to $0.5370$ at Epoch 3 as validation ROUGE-L rose from $39.45$ to $41.79$).
+
+\begin{table}[htbp]
+\centering
+\caption{Hold-out test set ROUGE F1 scores (\%) and length ($n = 213$).}
+\label{tab:c2_results}
+\scriptsize
+\renewcommand{\arraystretch}{0.92}
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\columnwidth}{lccccc}
+\toprule
+\textbf{Model} & \textbf{R-1} & \textbf{R-2} & \textbf{R-L} & \textbf{R-Lsum} & \textbf{Words} \\
+\midrule
+Lead-3 Extractive & 53.04 & 41.43 & 36.86 & 36.78 & 91.9 \\
+Zero-Shot T5-Small & 31.50 & 21.90 & 23.81 & 23.81 & 39.5 \\
+Fine-Tuned T5 (Beam=4) & \textbf{53.56} & \textbf{44.77} & \textbf{40.31} & \textbf{40.31} & 76.7 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Decoding strategy ablation on fine-tuned \texttt{t5-small} ($n = 213$).}
+\label{tab:c2_ablation}
+\scriptsize
+\renewcommand{\arraystretch}{0.92}
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabularx}{\columnwidth}{lcccccc}
+\toprule
+\textbf{Decoding Setting} & \textbf{R-1} & \textbf{R-2} & \textbf{R-L} & \textbf{Words} & \textbf{Rep-3g} & \textbf{Time} \\
+\midrule
+Greedy (Beams=1, No Block) & \textbf{55.03} & 44.73 & \textbf{41.45} & 87.5 & 13.83\% & \textbf{20.13\,s} \\
+Beam=4 + 3-gram Block & 53.56 & \textbf{44.77} & 40.31 & 76.7 & \textbf{0.04\%} & 27.29\,s \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.65\columnwidth]{c2_results.png}
+\caption{Hold-out test ROUGE comparison across models (left) and training vs.\ validation cross-entropy loss across 3 fine-tuning epochs (right).}
+\label{fig:c2_results}
+\end{figure}
+
+\subsection{Analysis}
+\textbf{Domain Adaptation vs.\ Baselines:} Zero-shot \texttt{t5-small} produced overly short summaries ($39.5$ words vs.\ $165.3$ reference words), yielding weak ROUGE-1 ($31.50$) and ROUGE-L ($23.81$). Fine-tuning adapted output length ($76.7$ words) and journalistic phrasing, gaining \textbf{+22.06} ROUGE-1, \textbf{+22.87} ROUGE-2, and \textbf{+16.50} ROUGE-L over zero-shot, and beating the strong Lead-3 extractive baseline by \textbf{+3.34} ROUGE-2 and \textbf{+3.45} ROUGE-L.
+
+\textbf{Decoding Trade-Off:} Unpenalized greedy decoding achieved slightly higher ROUGE-1 ($55.03$ vs.\ $53.56$) and faster inference ($20.13$\,s vs.\ $27.29$\,s), but suffered from severe degenerate phrase loops ($13.83\%$ repeated trigrams). Combining 4-beam search with 3-gram blocking eliminated repetition ($0.04\%$) while preserving the highest bigram precision ($44.77$ ROUGE-2).
+
+\textbf{Qualitative Case & Error Analysis:} Inspecting individual test predictions highlighted clear behavioral patterns: (1) \textit{Highest ROUGE-L ($88.32\%$, Entertainment, 249 words):} On a Brit Awards chart story, zero-shot output a fragmented 18-word clause, whereas fine-tuned \texttt{t5-small} captured the full album ranking narrative; (2) \textit{Median ROUGE-L ($39.62\%$, Business, 528 words):} On a Yukos bankruptcy report, zero-shot began mid-clause (\textit{``the unit, Yugansk...''}), whereas fine-tuned \texttt{t5-small} synthesized the core court allegation plus Yugansk and Deutsche Bank context; (3) \textit{Lowest ROUGE-L ($8.55\%$, Politics, 149 words):} On a Robert Kilroy-Silk immigration piece, the reference quoted specific asylum expenditure figures verbatim while fine-tuned \texttt{t5-small} generated a valid abstractive paraphrase (\textit{``Ex-chatshow host Robert Kilroy-Silk has attacked UK policy...''}), illustrating ROUGE's sensitivity to lexical overlap when valid paraphrases use different wording. Key limitations include $512$-token input truncation ($43.29\%$ of articles) and lack of factual-consistency verification.
+
+\section{Conclusion}
+Fine-tuning \texttt{t5-small} on BBC News articles outperformed zero-shot and Lead-3 baselines ($53.56$ ROUGE-1, $44.77$ ROUGE-2, $40.31$ ROUGE-L), while 4-beam decoding with trigram blocking suppressed repetition to $0.04\%$. Future work would evaluate long-context architectures (e.g., LED or LongT5) to avoid $512$-token truncation and incorporate BERTScore or NLI faithfulness checks.
+
+\section*{AI Use Disclosure}
+I used Google Gemini (2026) for structuring the Hugging Face \texttt{Seq2SeqTrainer} pipeline, implementing version-safe training arguments, and formatting this IEEE LaTeX report. The following parts were generated or substantially assisted by AI: boilerplate code in Cells 1--5 of \texttt{C2\_notebook.ipynb} and the LaTeX layout of Sections 1--7. I verified this content by running all cells end-to-end on Google Colab's T4 GPU, inspecting all generated summaries, and confirming that every reported ROUGE score, loss value, and dataset count matches my notebook outputs. All experiments, results, and analysis in this report were produced and checked by me, and I take full responsibility for this work.
+
+\begin{thebibliography}{9}
+\bibitem{bbc_ds} G. Kalpande, ``BBC News Summary,'' Hugging Face Datasets, 2023. [Online]. Available: \url{https://huggingface.co/datasets/gopalkalpande/bbc-news-summary}
+\bibitem{greene06} D. Greene and P. Cunningham, ``Practical solutions to the problem of diagonal dominance in kernel document clustering,'' in \textit{Proc. 23rd Int. Conf. Machine Learning (ICML)}, pp. 377--384, 2006.
+\bibitem{raffel20} C. Raffel et al., ``Exploring the limits of transfer learning with a unified text-to-text transformer,'' \textit{Journal of Machine Learning Research}, vol. 21, no. 140, pp. 1--67, 2020.
+\end{thebibliography}
+
+\end{document}
