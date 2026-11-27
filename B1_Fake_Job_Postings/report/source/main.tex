@@ -1,0 +1,159 @@
+\documentclass[conference,a4paper]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{amsmath,amssymb}
+\usepackage[hidelinks]{hyperref}
+
+\setlength{\textfloatsep}{4pt plus 1pt minus 1pt}
+\setlength{\intextsep}{4pt plus 1pt minus 1pt}
+\setlength{\abovecaptionskip}{1.5pt}
+\setlength{\belowcaptionskip}{1pt}
+
+\title{Task B1: Detecting Fraudulent Job Postings from Mixed Tabular and Text Data}
+
+\author{
+\IEEEauthorblockN{Aliaan Shams \quad Roll No. 70177202 \quad Section C}
+\IEEEauthorblockA{Department of Intelligent Systems, The University of Lahore (AI-101) \\
+Repository: \url{https://github.com/Aliaan-70177202/AI101-ML-Assignment-70177202} \\
+Instructor: Dr. Muhammad Awais, AI Architect}
+}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+Online recruitment platforms face persistent threats from fraudulent job listings designed to harvest personal data or extract upfront fees. Because scams comprise under 5\% of postings while blending promotional language with missing corporate metadata, reliable detection requires fusing unstructured text with structured attributes. We built a leakage-free multimodal pipeline combining engineered metadata indicators, one-hot categorical features, and sublinear word uni-/bi-gram TF-IDF features across three classifiers. A calibrated Linear SVM with validation-tuned thresholding achieved the best test performance ($0.8618$ fraud F1, $0.9404$ PR-AUC), outperforming structured-only and text-only models by $0.4420$ and $0.0253$ F1, respectively.
+
+\section{Problem Statement}
+Given a job advertisement $\mathbf{x} = (\mathbf{x}_{\text{num}}, \mathbf{x}_{\text{cat}}, \mathbf{x}_{\text{text}})$ of numeric flags, categorical attributes, and concatenated free-text fields, the goal is to learn a binary classifier $f: \mathbf{x} \mapsto y \in \{0, 1\}$, where $y = 1$ denotes fraud and $y = 0$ denotes a real job. Due to severe imbalance (95.16\% real vs.\ 4.84\% fraud), performance is measured via fraud-class F1-score and PR-AUC rather than accuracy, balancing missed scams (false negatives) against wrongful takedowns (false positives).
+
+\section{Dataset Used}
+We used the Employment Scam Aegean Dataset (EMSCAD) via Kaggle (\texttt{shivamb/real-or-fake-fake-jobposting-prediction}, CC0 license) \cite{emscad}, containing 17,880 postings across 17 input attributes: five text fields (\textit{title}, \textit{company\_profile}, \textit{description}, \textit{requirements}, \textit{benefits}), six categorical fields (\textit{employment\_type}, \textit{required\_experience}, \textit{required\_education}, \textit{industry}, \textit{function}, \textit{location}), three binary flags (\textit{telecommuting}, \textit{has\_company\_logo}, \textit{has\_questions}), plus \textit{salary\_range}, \textit{department}, and \textit{job\_id}. All 17,880 rows were retained. Text fields were concatenated, stripped of HTML tags and extra spaces, and vectorized into 20,000 word (1,2)-gram TF-IDF features. Because missing metadata is strongly diagnostic, we engineered four binary missingness flags (\textit{company\_profile}, \textit{salary\_range}, \textit{requirements}, \textit{benefits}) plus character and word counts.
+
+\section{Dataset Statistics}
+Table~\ref{tab:b1_stats} summarizes dataset dimensions, missingness, text lengths, vocabulary size, and split counts. Fig.~\ref{fig:b1_eda} shows the severe class imbalance and shorter character lengths of fraudulent postings (median $1,656.5$ vs.\ $2,560.5$). Listings without a company logo had a 15.93\% fraud rate versus 1.99\% with a logo, while part-time roles had the highest fraud rate among employment types (9.28\%).
+
+\begin{table}[htbp]
+\centering
+\caption{Dataset statistics for Real or Fake Job Postings (EMSCAD).}
+\label{tab:b1_stats}
+\scriptsize
+\renewcommand{\arraystretch}{0.92}
+\begin{tabularx}{\columnwidth}{lX}
+\toprule
+\textbf{Property} & \textbf{Value} \\
+\midrule
+Samples (cleaned) & 17,880 (0 removed) \\
+Features & 9 numeric (4 missing flags, 2 lengths), 5 cat.\ (68 OHE), 5 text \\
+Target classes & Binary: Real (0) vs.\ Fraudulent (1) \\
+Class distribution & 17,014 Real (95.16\%) / 866 Fraud (4.84\%) \\
+Top missingness & \textit{salary\_range} 83.96\%, \textit{department} 64.58\%, \textit{required\_education} 45.33\%, \textit{company\_profile} 18.50\% \\
+Text length (mean$\pm$sd) & Real: $2700.6 \pm 1455.8$ | Fraud: $2078.6 \pm 1529.7$ chars \\
+TF-IDF vocabulary & 20,000 word (1,2)-grams (fitted on train only) \\
+Train / Val / Test & 12,516 (70\%) / 2,682 (15\%) / 2,682 (15\%) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.65\columnwidth]{b1_eda.png}
+\caption{Severe class imbalance (left) and combined text character length boxplots by class showing shorter descriptions in fraudulent listings (right).}
+\label{fig:b1_eda}
+\end{figure}
+
+\section{Methodology}
+\subsection{Learning Setting}
+This is an imbalanced binary classification task on mixed tabular and text data. We evaluated three classifiers suited to high-dimensional sparse matrices: (1) L2-regularized Logistic Regression; (2) Calibrated Linear SVM (\texttt{LinearSVC} wrapped in 3-fold \texttt{CalibratedClassifierCV}); and (3) Random Forest. All models used \texttt{class\_weight="balanced"} and a single \texttt{ColumnTransformer} combining median imputation + \texttt{StandardScaler}, \texttt{OneHotEncoder} (\texttt{max\_categories=20}), and sublinear \texttt{TfidfVectorizer}.
+
+\subsection{Data Split Approach}
+We used a stratified 70\%/15\%/15\% split ($12,516$ train / $2,682$ validation / $2,682$ test) with \texttt{random\_state = 42}. Scalers, encoders, and TF-IDF vocabularies were fitted strictly on $X_{\text{train}}$ to prevent leakage. Thresholds $t \in [0.10, 0.90]$ (step $0.02$) were tuned solely on the validation set to maximize fraud F1, and the test set was evaluated once.
+
+\subsection{Parameter Settings}
+Table~\ref{tab:b1_params} lists hyperparameters and validation-tuned thresholds.
+
+\begin{table}[htbp]
+\centering
+\caption{Model hyperparameters and validation-tuned thresholds.}
+\label{tab:b1_params}
+\scriptsize
+\renewcommand{\arraystretch}{0.92}
+\begin{tabularx}{\columnwidth}{lXl}
+\toprule
+\textbf{Model} & \textbf{Configuration / Search Space} & \textbf{Selected} \\
+\midrule
+Logistic Reg. & $C=1.0$, balanced, $t \in [0.10, 0.90]$ & $t = 0.76$ \\
+Linear SVM & $C=0.5$, balanced, 3-fold Platt, $t \in [0.10, 0.90]$ & $t = 0.40$ \\
+Random Forest & $200$ trees, $\text{max\_depth}=25$, balanced, $t \in [0.10, 0.90]$ & $t = 0.66$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Results and Analysis}
+\subsection{Results}
+Table~\ref{tab:b1_results} reports test-set results across all three models, and Table~\ref{tab:b1_ablation} details the feature-modality ablation using the winning Calibrated Linear SVM. Fig.~\ref{fig:b1_results} displays its test confusion matrix ($\text{TN}=2,542$, $\text{FP}=10$, $\text{FN}=24$, $\text{TP}=106$) and Precision-Recall curves.
+
+\begin{table}[htbp]
+\centering
+\caption{Hold-out test-set results across models ($n = 2,682$).}
+\label{tab:b1_results}
+\scriptsize
+\renewcommand{\arraystretch}{0.92}
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\columnwidth}{lcccccc}
+\toprule
+\textbf{Model} & \textbf{Thresh.} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{PR-AUC} & \textbf{ROC} \\
+\midrule
+Logistic Reg. & 0.76 & 0.8607 & 0.8077 & 0.8333 & 0.9080 & 0.9917 \\
+Linear SVM & 0.40 & 0.9138 & \textbf{0.8154} & \textbf{0.8618} & \textbf{0.9404} & \textbf{0.9925} \\
+Random Forest & 0.66 & \textbf{0.9140} & 0.6538 & 0.7623 & 0.8399 & 0.9834 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Ablation study on test set using Calibrated Linear SVM.}
+\label{tab:b1_ablation}
+\scriptsize
+\renewcommand{\arraystretch}{0.92}
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\columnwidth}{lcccccc}
+\toprule
+\textbf{Feature Set} & \textbf{Feats} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{PR-AUC} & \textbf{ROC} \\
+\midrule
+Structured Only & 77 & 0.3091 & 0.6538 & 0.4198 & 0.3639 & 0.9065 \\
+Text Only & 20,000 & 0.8271 & \textbf{0.8462} & 0.8365 & 0.9244 & 0.9895 \\
+Combined & 20,077 & \textbf{0.9138} & 0.8154 & \textbf{0.8618} & \textbf{0.9404} & \textbf{0.9925} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.65\columnwidth]{b1_results.png}
+\caption{Test confusion matrix for Calibrated Linear SVM at $t = 0.40$ (left) and Precision-Recall curves across all three models (right).}
+\label{fig:b1_results}
+\end{figure}
+
+\subsection{Analysis}
+\textbf{Why Accuracy Is Misleading:} Because 95.16\% of listings are real, a dummy classifier predicting ``Real'' for every posting achieves \textbf{95.15\%} test accuracy while catching zero scams ($0.0000$ recall and F1). PR-AUC ($0.9404$) and fraud F1 ($0.8618$) directly measure minority-class detection without inflation from true negatives.
+
+\textbf{Modality Ablation:} Fusing structured metadata with TF-IDF text outperformed either modality alone (Table~\ref{tab:b1_ablation}). Structured features alone yielded only $0.4198$ F1 and $0.3639$ PR-AUC due to high false positives ($0.3091$ precision). Text-only reached $0.8365$ F1 and $0.9244$ PR-AUC, while adding the 77 structured features improved F1 by \textbf{+0.0253} ($0.8618$) and PR-AUC by \textbf{+0.0160} ($0.9404$) by lifting precision from $0.8271$ to $0.9138$.
+
+\textbf{Fraud Indicators and Error Analysis:} Logistic Regression weights highlighted financial/recruitment-bait n-grams—\textit{accion} ($+2.901$), \textit{aptitude staffing} ($+2.900$), \textit{link} ($+2.823$), \textit{earn} ($+2.795$), \textit{money} ($+2.688$), \textit{data entry} ($+2.311$), \textit{000} ($+2.289$), and \textit{Oil \& Energy} ($+2.092$)—whereas legitimate jobs were anchored by \textit{Health Care Provider} ($-2.774$), \textit{Internet} ($-2.205$), \textit{client} ($-1.892$), and \textit{team} ($-1.463$). Inspecting the 10 false positives revealed common edge cases: Index 9886 ($p=0.448$, Senior Process Engineer) omitted a logo and profile while using Oil \& Energy process terms; Index 12864 ($p=0.421$, Backend Engineer) was a startup lacking a logo/profile with promotional phrasing (\textit{``seen by millions''}); and Index 8193 ($p=0.905$, Accounting Clerk \$15/hr) lacked a logo/profile while repeating \textit{``data entry''}. Key limitations are reliance on bag-of-words n-grams over contextual embeddings and dataset age (2012--2014).
+
+\section{Conclusion}
+Calibrated Linear SVM on combined TF-IDF text and engineered metadata achieved $0.8618$ fraud F1 and $0.9404$ PR-AUC, beating single-modality baselines. Random Forest struggled on 20,000 sparse n-grams ($0.7623$ F1), and missing profiles occasionally triggered false alarms on legitimate startups and clerical jobs. Future work would fine-tune a transformer encoder (e.g., DeBERTa) fused with tabular metadata.
+
+\section*{AI Use Disclosure}
+I used Google Gemini (2026) for structuring the \texttt{ColumnTransformer} preprocessing pipeline, debugging automated ZIP dataset extraction, and polishing the LaTeX layout of this report. The following parts were generated or substantially assisted by AI: boilerplate code in Cells 1--5 of \texttt{B1\_notebook.ipynb} and the LaTeX formatting of Sections 1--7. I verified this content by executing every cell top-to-bottom in Jupyter Notebook, verifying that all printed tables, confusion-matrix counts, and ablation results match the reported figures. All experiments, results, and analysis in this report were produced and checked by me, and I take full responsibility for this work.
+
+\begin{thebibliography}{9}
+\bibitem{emscad} S. Bansal, ``Real or Fake Job Posting Prediction (EMSCAD),'' Kaggle, 2020. [Online]. Available: \url{https://www.kaggle.com/datasets/shivamb/real-or-fake-fake-jobposting-prediction}
+\bibitem{sklearn} F. Pedregosa et al., ``Scikit-learn: Machine learning in Python,'' \textit{Journal of Machine Learning Research}, vol. 12, pp. 2825--2830, 2011.
+\end{thebibliography}
+
+\end{document}
